@@ -17,6 +17,10 @@ exports.module.init = function(){
   setInterval(customFunction, 5); // Example of a task you run with this module.
 };
 
+exports.module.close = function(){
+	// Run code before closing. This will be called when the process needs to close via Ctrl + C for example.
+};
+
 function customFunction(){
   // Do some custom things.
 }
