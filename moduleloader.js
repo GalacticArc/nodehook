@@ -1,12 +1,12 @@
 /*
 	ModuleLoader v0.1
-		Loads modules from the modules directory.
+	Loads modules from the modules directory.
 */
 var fs = require("fs");
 global.modules = {};
 global.mod = function(){ return "yo"; };
 global.server = {
-	id: "default"
+	id: "default" // This is the process ID, this is for multi-processes.
 };
 
 var skipmods = [];
