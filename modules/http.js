@@ -1,7 +1,3 @@
-/*
- Module Name: httphandler
-  Description: It makes it a bit quicker to hook into certain URLs, currently does not support query strings.
-*/
 exports.module = {
 	name: "httphandler",
 	requires: [],
@@ -14,14 +10,14 @@ var server = {};
 var settings = {
 	port: 0
 };
-var hooks = {};
-function handleRequest(request, response){
+var hooks = [];
+function handleRequest(request, response, httpconfig){
+	if(httpconfig == undefined){
+		console.log("Missing httpconfig");
+		return; 
+	}
+	console.log("Request on "+httpconfig.name);
     try {
-		if(request.url == "/"){
-			response.writeHead(200, {'Content-Type': 'text/html'});
-			response.end("The server ID is "+global.server.id);		
-			return;
-		}
 		var s = request.url.split("/");
 		var page_data = [];
 		for(var i in s){
@@ -29,29 +25,32 @@ function handleRequest(request, response){
 				page_data.push(s[i]);
 			}
 		}
-		if(hooks[page_data[0]] != undefined){
-			var h = hooks[page_data[0]];
-			if(request.method == "POST" && request.method == h.method){
-				if(h.json){
-					var dj = JSON.parse(request.body);
-					h.callback(page_data, request, response, dj);	
-				} else {
+		var hfound = false;
+		for(var i in hooks){
+			var h = hooks[i];
+			if((h.path == "/" && page_data[0] == undefined) || h.path == page_data[0]){
+				hfound = true;
+				if(request.method == "POST" && request.method == h.method){
+					if(h.json){
+						var dj = JSON.parse(request.body);
+						h.callback(page_data, request, response, dj);	
+					} else {
+						h.callback(page_data, request, response);
+					}
+				} else if(request.method == "GET" && request.method == h.method) {
 					h.callback(page_data, request, response);
+				} else {
+					response.writeHead(404, {'Content-Type': 'text/html'});
+					response.end("The API you're looking for was not found. 2");	
+					return;
 				}
-			} else if(request.method == "GET" && request.method == h.method) {
-				h.callback(page_data, request, response);
-			} else {
-				response.writeHead(404, {'Content-Type': 'text/html'});
-				response.end("The API you're looking for was not found.");	
-				return;
 			}
-		} else {
+		}
+		if(hfound == false){
 			response.writeHead(404, {'Content-Type': 'text/html'});
 			response.end("The API you're looking for was not found.");	
-			return;
+			return;	
 		}
-		
-        //dis.dispatch(request, response);
     } catch(err) {
        console.log(err);
     }
@@ -66,31 +65,45 @@ exports.module.init = function(){
 	
 };
 
-exports.hookpost = function(rname, callback, json){
+exports.hookpost = function(rname, callback, json, httpconfig){
 	if(json == undefined){ json = false; };
 	var hook = {
+		path: rname,
 		json: json,
 		method: "POST",
-		callback: callback
+		callback: callback,
+		name: httpconfig.name
 	}
 	
-	hooks[rname] = hook;
+	hooks.push(hook);
 };
 
-exports.hookget = function(rname, callback, json){
+exports.hookget = function(rname, callback, json, httpconfig){
 	if(json == undefined){ json = false; };
 	var hook = {
+		path: rname,
 		json: json,
 		method: "GET",
-		callback: callback
+		callback: callback,
+		name: httpconfig.name
 	}
 	
-	hooks[rname] = hook;
+	hooks.push(hook);
 };
 
-exports.hookport = function(iport, callback){
-	var sport = iport.toString();
-	server[sport] = http.createServer(handleRequest);
-	console.log("Setting up port "+sport);
-	server[sport].listen(iport, function(){});
+exports.hookport = function(iport, httpconfig){
+	if(httpconfig == undefined || httpconfig.name == undefined){
+		console.log("No httpconfig or name defined when setting up port "+iport);
+		return;
+	}
+	if(iport == false){
+		console.log("No port defined in parameters when setting up "+httpconfig.name);	
+	} else {
+		var sport = iport.toString();
+		server[sport] = http.createServer(function(h,h2){
+			handleRequest(h,h2,httpconfig);
+		});
+		console.log("Setting up port "+sport+" with name "+httpconfig.name);
+		server[sport].listen(iport, function(){});
+	}
 };
