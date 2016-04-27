@@ -35,9 +35,6 @@ exports.handleMessage = function(b, un, u, c, m, r){
 			return;
 		}
 	}
-	if(m.toLowerCase().indexOf("vape") > -1){
-		exports.channelmessage({use: "spacearcdb"}, c, "WE GET IT, YOU VAPE!!!");
-	}
 	if(m.substring(0,settings.settings.prefix.length) == settings.settings.prefix){
 		var cmd = m.split(" ");
 		var excmd = cmd[0].substring(settings.settings.prefix.length);
