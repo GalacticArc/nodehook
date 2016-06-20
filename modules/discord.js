@@ -5,9 +5,9 @@ exports.module = {
 	libraries: ["discord.js"],
 	failed: false
 };
-var dsettings = require("../data/discord.json"); 
+var dsettings = require(global.directory+"data/discord.json"); 
 var sql = null;
-var Discord = require("discord.js");
+global.shard = false;
 exports.bots = {};
 exports.hooks = [];
 exports.prefixes = [];
@@ -35,7 +35,12 @@ function out(c,m){
 // Handles new messages.
 // Bot Name, Username, User ID, Channel ID, Message, Raw Event.
 exports.handleMessage = function(b, m){
-
+	for(var bot in exports.bots){
+		if(exports.bots[bot].user.id == m.author.id){
+			return;
+		}
+	}
+	
 	try {
 		if(m.author.bot === false){
 			for(var i in exports.prefixes){
@@ -45,14 +50,17 @@ exports.handleMessage = function(b, m){
 						var cmds = m.content.substring(p.length).split(" ");
 						var excmd = cmds[0];
 						for(var h in exports.hooks){
-							if(exports.prefixes[i].discord.name == exports.hooks[h].discord.name && exports.hooks[h].command == excmd){
+							if(exports.prefixes[i].discord.name == exports.hooks[h].discord.name && exports.hooks[h].command.toLowerCase() == excmd.toLowerCase()){
 								if(exports.prefixes[i].discord.check != undefined){
-									if(exports.prefixes[i].discord.check(m, excmd) == true){
-										exports.hooks[h].callback(m, exports.hooks[h].command);
+									if(exports.prefixes[i].discord.check(m, excmd) !== true){
 										return;
 									}
-								} else {
+								}
+								if(exports.hooks[h].v === 1){
 									exports.hooks[h].callback(m, exports.hooks[h].command);
+									return;
+								} else if(exports.hooks[h].v === 2){
+									exports.hooks[h].callback(m, m.content.substring(p.length+excmd.length+1));
 									return;
 								}
 							}
@@ -67,7 +75,8 @@ exports.handleMessage = function(b, m){
 			}
 		}, 0);	
 	} catch(err){
-		console.log(err.stack);
+		console.log("Error caught");
+		sql.logError(err, m.channel.server.id);
 		sql.logchat(m, function(success){
 			if(!success){
 				console.log("Error with SQL");	
@@ -86,7 +95,8 @@ exports.module.preinit = function(){
 	
 	global.discord = exports;
 	// Initaite all the bots.
-	var settings = require("../data/discord.json");
+	var settings = require(global.directory+"data/discord.json");
+	global.logging = settings.logging || false;
 	exports.mainbot = settings.settings["mainbot"];
 	for(var b in settings.bots){
 		if(settings.bots[b].token != undefined){
@@ -104,43 +114,57 @@ exports.hookprefix = function(discordhook, prefix){
 };
 
 // Hooks the command to the specific discordhook, requires the prefix to be called.
-exports.hookcommand = function(discordhook, command, callback){
-	exports.hooks.push({
+exports.hookcommand = function(discordhook, command, callback, settings){
+	var hook = {
 		discord: discordhook,
 		command: command,
-		callback: callback
-	});
+		callback: callback,
+		v: 1 // Version of callback
+	}
+	if(settings !== undefined){
+		if(settings.version !== undefined){
+			hook.v = settings.version;
+		}
+	}
+	exports.hooks.push(hook);
 };
 
 exports.initiatebot = function(name, settings){
+	var Discord = require("discord.js");
 	var ready = false;
-	console.log("Created bot "+Object.keys(exports.bots).length);
-	exports.bots[name] = new Discord.Client();
-	exports.bots[name].on("message", function(m) {
-		if(!ready){ return; }
-		if(dsettings.settings.admins.indexOf(m.author.id) > -1){
-			console.log(m.channel.server.name +" > "+m.author.username+" > "+m.cleanContent);
+	exports.bots[name] = new Discord.Client({autoReconnect: true});
+	exports.bots[name].on("message", function(message) {
+		if(!ready){return;}
+		exports.handleMessage(name, message);
+	});
+
+	exports.bots[name].on("disconnected", function(message) {
+		console.log("Disconnected");
+	});
+
+	exports.bots[name].on("ready", function(message) {
+		setTimeout(function(){ready = true;}, 500);
+	});
+
+	exports.bots[name].on("messageUpdated", (msg, editedmsg) => {
+		if(sql.logchatedit !== undefined){
+			sql.logchatedit(msg, editedmsg, ()=>{
+
+			});
 		}
-		exports.handleMessage(name, m);
-	});
-	exports.bots[name].on("ready", function(){
-		console.log("Bot is now ready");
-		setTimeout(function(){
-			ready = true;
-		}, 1000);
-	});
+	})
 	
 	exports.bots[name].on("error", function(err) {
 		console.log("Error with Discord.js");
 		console.log(err.stack);
 	});
-	exports.bots[name].on("disconnected", function(){
-		console.log("Disconnected");
-	});
+
+	global.dbot = exports.bots[name];
 
 	setTimeout(function(){
 		exports.bots[name].loginWithToken(settings.token);
 	}, 500);
+	
 };
 
 exports.module.init = function(){
